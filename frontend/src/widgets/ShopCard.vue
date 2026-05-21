@@ -53,6 +53,7 @@ const payUrl = ref("");
 const currentOrderInfo = ref<{ orderId: string; amount: number; expireTime: number } | null>(null);
 const paySuccess = ref(false);
 const payPollingTimer = ref<ReturnType<typeof setInterval> | null>(null);
+let payWindowRef: Window | null = null;
 
 // Price editing (admin only)
 const priceModalVisible = ref(false);
@@ -232,7 +233,7 @@ async function handleCreateOrder(daemonId: string, instanceUuid: string, periodT
 // Open payment URL
 function openPayUrl() {
   if (payUrl.value) {
-    (globalThis as any).open(payUrl.value, "_blank");
+    payWindowRef = (globalThis as any).open(payUrl.value, "_blank");
   }
   // Start polling for payment status after opening payment URL
   startPayPolling();
@@ -251,7 +252,14 @@ function startPayPolling() {
       if (res.value && (res.value.status === "paid" || res.value.status === "renew_pending")) {
         paySuccess.value = true;
         stopPayPolling();
-        // Auto close after 3 seconds
+        // Close the payment tab
+        try {
+          if (payWindowRef && !payWindowRef.closed) payWindowRef.close();
+        } catch { /* ignore cross-origin close */ }
+        payWindowRef = null;
+        // Focus back to this window
+        (globalThis as any).focus();
+        // Auto close after 1.5 seconds
         setTimeout(() => {
           payModalVisible.value = false;
           paySuccess.value = false;
@@ -259,12 +267,12 @@ function startPayPolling() {
           if (activeTab.value === "orders") {
             loadOrderHistory();
           }
-        }, 3000);
+        }, 1500);
       }
     } catch {
       // Ignore polling errors
     }
-  }, 3000);
+  }, 1500);
 }
 
 // Stop polling
